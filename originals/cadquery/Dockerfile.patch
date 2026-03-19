@@ -1,0 +1,71 @@
+# FORGE — docker/cadquery/Dockerfile.patch
+#
+# Diff-style patch showing the bd_warehouse addition to the existing Dockerfile.
+# Apply by inserting the + lines at the indicated location.
+#
+# Context: The existing Dockerfile installs pip packages via a RUN pip install
+# block that includes cq_warehouse (line 44 in the original).  Add bd_warehouse
+# immediately after it so it is installed in the same layer.
+#
+# ─── PATCH ─────────────────────────────────────────────────────────────────
+#
+#  Original (lines 42-48, approximately):
+#
+#    RUN pip install --no-cache-dir \
+#        cadquery \
+#        cq_warehouse \
+#        ocp_vscode \
+#        fastapi \
+#        uvicorn[standard] \
+#        pydantic
+#
+#  After patch:
+#
+#    RUN pip install --no-cache-dir \
+#        cadquery \
+#        cq_warehouse \
+#+       bd_warehouse \
+#        ocp_vscode \
+#        fastapi \
+#        uvicorn[standard] \
+#        pydantic
+#
+# ─── COMPLETE PATCHED DOCKERFILE (for reference / full replacement) ─────────
+
+FROM python:3.11-slim
+
+LABEL org.opencontainers.image.title="forge-cadquery"
+LABEL org.opencontainers.image.description="FORGE CadQuery + bd_warehouse container"
+LABEL org.opencontainers.image.version="2.0.0"
+
+# ── System dependencies ────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        build-essential \
+        libgl1 \
+        libglu1-mesa \
+        libgomp1 \
+        libxrender1 \
+        libxext6 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Python packages ────────────────────────────────────────────────────────
+# Install from requirements.txt for reproducible builds.
+WORKDIR /app
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /app/requirements.txt
+
+# ── Application files ──────────────────────────────────────────────────────
+COPY api_wrapper.py         /app/api_wrapper.py
+COPY api_wrapper_patch.py   /app/api_wrapper_patch.py
+COPY tokens.json            /app/tokens.json
+
+# ── Shared data mount point ────────────────────────────────────────────────
+RUN mkdir -p /opt/forge/data
+
+# ── Runtime ───────────────────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8002
+CMD ["uvicorn", "api_wrapper:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "2"]

@@ -1,0 +1,16 @@
+# picogk/requirements.txt
+# Service-specific requirements for the PicoGK voxel geometry service.
+# Common deps (fastapi, uvicorn, pydantic, psutil, prometheus-client, pint)
+# are installed by forge-python-base.
+#
+# PicoGK is a lightweight voxel-based geometry shim — minimal additional deps.
+# fastapi/uvicorn/psutil are already in forge-python-base, but included here
+# for explicitness and to match the versions already working in production.
+#
+# All versions pinned (matching original exactly — already pinned upstream).
+
+# Note: fastapi, uvicorn, psutil are already in forge-python-base at compatible
+# versions. These explicit pins confirm the tested versions.
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+psutil==7.0.0

@@ -1,0 +1,10 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+psutil>=5.9.0
+paramak>=0.8.0
+cadquery>=2.4.0
+cadquery-ocp>=7.7.0
+numpy>=1.24.0
+scipy>=1.10.0
+pint>=0.23

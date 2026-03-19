@@ -1,0 +1,12 @@
+# FORGE — docker/cadquery/requirements_patch.txt
+#
+# Additions to docker/cadquery/requirements.txt for Prompt 7.
+# Append these lines to the existing requirements.txt file, or merge manually.
+#
+# bd_warehouse is a Build123d-native fastener library with ISO/DIN/ANSI standard
+# support.  It provides direct fastener geometry without CadQuery post-processing.
+# Compatible with the existing cq_warehouse install — both can coexist.
+#
+# See: https://github.com/gumyr/bd_warehouse
+
+bd_warehouse>=0.10.0

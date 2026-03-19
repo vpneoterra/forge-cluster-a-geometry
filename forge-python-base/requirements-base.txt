@@ -1,0 +1,22 @@
+# forge-python-base/requirements-base.txt
+# Common Python dependencies shared across all Cluster A geometry services.
+# Pinned for reproducibility. Services inherit these and may add additional deps.
+#
+# To update: pin to the latest stable versions and test all services together.
+
+# ── Web framework ────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.9.2
+
+# ── System metrics ───────────────────────────────────────────
+psutil==5.9.8
+
+# ── Observability ────────────────────────────────────────────
+prometheus-client==0.21.0
+
+# ── Unit handling (shared across geometry services) ──────────
+pint==0.24.3
+
+# ── Async HTTP (optional, available for inter-service calls) ─
+httpx==0.27.2

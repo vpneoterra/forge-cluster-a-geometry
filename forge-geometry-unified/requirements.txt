@@ -1,0 +1,10 @@
+# forge-geometry-unified/requirements.txt
+# Unified container requirements. All engine-specific packages are installed
+# in the cq-layer build stage. This file handles any additional runtime deps
+# and ensures version consistency across the unified API gateway.
+#
+# Common deps already in forge-python-base:
+#   fastapi, uvicorn, pydantic, psutil, prometheus-client, pint, httpx
+
+# No additional requirements beyond forge-python-base and the cq-layer.
+# All geometry engine deps are installed directly in the Dockerfile build stages.

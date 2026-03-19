@@ -1,0 +1,21 @@
+# cadquery/requirements.txt
+# Service-specific requirements. Common deps (fastapi, uvicorn, pydantic,
+# psutil, prometheus-client, pint) are already installed by forge-python-base.
+# Only add cadquery-specific packages here.
+#
+# All versions pinned for reproducibility.
+
+# ── CadQuery + OCC ───────────────────────────────────────────
+cadquery==2.4.0
+cadquery-ocp==7.7.2.1
+
+# ── Scientific computing ──────────────────────────────────────
+numpy==1.26.4
+scipy==1.13.1
+pyparsing==3.1.4
+
+# ── CAD utilities ────────────────────────────────────────────
+# cq_warehouse: CadQuery-native fastener/hardware library
+# bd_warehouse: Build123d-compatible fastener library (added in patch)
+cq_warehouse==0.9.5
+bd_warehouse==0.10.0

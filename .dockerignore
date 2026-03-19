@@ -1,0 +1,80 @@
+# ============================================================
+# .dockerignore — Shared for all FORGE Cluster A services
+# Prevents unnecessary files from being sent to Docker build context
+# ============================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Python artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.Python
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Documentation / non-build files
+docs/
+*.md
+LICENSE
+README*
+
+# Environment files (security: never include secrets in build context)
+.env
+.env.*
+!.env.example
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Large binary / data artifacts (not needed in build context)
+*.h5m
+*.step
+*.stl
+*.brep
+*.nc
+*.h5
+data/
+originals/

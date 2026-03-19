@@ -1,0 +1,227 @@
+# ============================================================
+# FORGE Cluster A — Geometry Kernel
+# docker-compose.yml
+#
+# Two run modes:
+#
+#   Individual (development / debugging):
+#     docker-compose up cadquery paramak parastell picogk
+#
+#   Unified (production, ~1.8 GB smaller footprint):
+#     docker-compose up forge-geometry-unified
+#
+# Build base first:
+#   docker build -t forge-python-base:1.0.0 ./forge-python-base
+# ============================================================
+
+version: "3.9"
+
+# ── Networks ─────────────────────────────────────────────────
+networks:
+  forge-geometry:
+    driver: bridge
+    name: forge-geometry-net
+
+# ── Volumes ───────────────────────────────────────────────────
+volumes:
+  geometry-data:
+    name: forge-geometry-data
+
+# ── Services ──────────────────────────────────────────────────
+services:
+
+  # ── Individual Mode: CadQuery ──────────────────────────────
+  cadquery:
+    build:
+      context: ./cadquery
+      dockerfile: Dockerfile
+      args:
+        SOLVER_VERSION: "${CADQUERY_VERSION:-2.2.0}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+    image: forge-cadquery:${CADQUERY_VERSION:-2.2.0}
+    container_name: forge-cadquery
+    restart: unless-stopped
+    ports:
+      - "${CADQUERY_PORT:-8002}:8002"
+    networks:
+      - forge-geometry
+    volumes:
+      - geometry-data:/data
+    environment:
+      FORGE_PORT: "8002"
+      FORGE_TIMEOUT: "${FORGE_TIMEOUT:-300}"
+      PYTHONUNBUFFERED: "1"
+    deploy:
+      resources:
+        limits:
+          memory: "${CADQUERY_MEMORY:-1500m}"
+        reservations:
+          memory: "256m"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    profiles:
+      - individual
+      - dev
+
+  # ── Individual Mode: Paramak ───────────────────────────────
+  paramak:
+    build:
+      context: ./paramak
+      dockerfile: Dockerfile
+      args:
+        SOLVER_VERSION: "${PARAMAK_VERSION:-2.2.0}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+    image: forge-paramak:${PARAMAK_VERSION:-2.2.0}
+    container_name: forge-paramak
+    restart: unless-stopped
+    ports:
+      - "${PARAMAK_PORT:-8006}:8006"
+    networks:
+      - forge-geometry
+    volumes:
+      - geometry-data:/data
+    environment:
+      FORGE_PORT: "8006"
+      FORGE_TIMEOUT: "${FORGE_TIMEOUT:-300}"
+      PYTHONUNBUFFERED: "1"
+    deploy:
+      resources:
+        limits:
+          memory: "${PARAMAK_MEMORY:-1500m}"
+        reservations:
+          memory: "256m"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    profiles:
+      - individual
+      - dev
+
+  # ── Individual Mode: ParaStell ─────────────────────────────
+  parastell:
+    build:
+      context: ./parastell
+      dockerfile: Dockerfile
+      args:
+        SOLVER_VERSION: "${PARASTELL_VERSION:-2.2.0}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+    image: forge-parastell:${PARASTELL_VERSION:-2.2.0}
+    container_name: forge-parastell
+    restart: unless-stopped
+    ports:
+      - "${PARASTELL_PORT:-8007}:8007"
+    networks:
+      - forge-geometry
+    volumes:
+      - geometry-data:/data
+    environment:
+      FORGE_PORT: "8007"
+      FORGE_TIMEOUT: "${FORGE_TIMEOUT:-300}"
+      PARASTELL_HOME: "/opt/parastell"
+      PYTHONUNBUFFERED: "1"
+    deploy:
+      resources:
+        limits:
+          memory: "${PARASTELL_MEMORY:-2000m}"
+        reservations:
+          memory: "512m"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    profiles:
+      - individual
+      - dev
+
+  # ── Individual Mode: PicoGK ────────────────────────────────
+  picogk:
+    build:
+      context: ./picogk
+      dockerfile: Dockerfile
+      args:
+        SOLVER_VERSION: "${PICOGK_VERSION:-1.1.0}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+    image: forge-picogk:${PICOGK_VERSION:-1.1.0}
+    container_name: forge-picogk
+    restart: unless-stopped
+    ports:
+      - "${PICOGK_PORT:-8015}:8015"
+    networks:
+      - forge-geometry
+    volumes:
+      - geometry-data:/opt/forge/data
+    environment:
+      FORGE_PORT: "8015"
+      FORGE_TIMEOUT: "${FORGE_TIMEOUT:-600}"
+      FORGE_DATA_DIR: "/opt/forge/data"
+      PICOGK_VOXEL_SIZE: "${PICOGK_VOXEL_SIZE:-0.2}"
+      PYTHONUNBUFFERED: "1"
+    deploy:
+      resources:
+        limits:
+          memory: "${PICOGK_MEMORY:-1000m}"
+        reservations:
+          memory: "128m"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    profiles:
+      - individual
+      - dev
+
+  # ── Unified Mode (Production) ─────────────────────────────
+  # Single container with all 4 engines. CadQuery/OCC installed once.
+  # ~1.8 GB smaller than running individual services.
+  # Exposes all engines on port 8020 via /cadquery, /paramak, /parastell, /picogk prefixes.
+  forge-geometry-unified:
+    build:
+      context: ./forge-geometry-unified
+      dockerfile: Dockerfile
+      args:
+        SOLVER_VERSION: "${UNIFIED_VERSION:-2.2.0}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+    image: forge-geometry-unified:${UNIFIED_VERSION:-2.2.0}
+    container_name: forge-geometry-unified
+    restart: unless-stopped
+    ports:
+      - "${UNIFIED_PORT:-8020}:8020"
+    networks:
+      - forge-geometry
+    volumes:
+      - geometry-data:/opt/forge/data
+    environment:
+      FORGE_PORT: "8020"
+      FORGE_TIMEOUT: "${FORGE_TIMEOUT:-300}"
+      FORGE_DATA_DIR: "/opt/forge/data"
+      PARASTELL_HOME: "/opt/parastell"
+      PICOGK_VOXEL_SIZE: "${PICOGK_VOXEL_SIZE:-0.2}"
+      SOLVER_VERSION: "${UNIFIED_VERSION:-2.2.0}"
+      GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+      PYTHONUNBUFFERED: "1"
+    deploy:
+      resources:
+        limits:
+          memory: "${UNIFIED_MEMORY:-4000m}"
+        reservations:
+          memory: "512m"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 15s
+      start_period: 120s
+      retries: 3
+    profiles:
+      - unified
+      - production
