@@ -27,7 +27,7 @@ consolidation decisions.
 | CadQuery | 8002 | General parametric CAD (STEP/STL/BREP/SVG) | cadquery-ocp (OCC) |
 | Paramak | 8006 | Fusion reactor tokamak/stellarator CAD | cadquery + paramak |
 | ParaStell | 8007 | Stellarator geometry from VMEC equilibria | cadquery + DAGMC + pystell |
-| PicoGK | 8015 | Voxel-based geometry (lattice + boolean) | pure Python shim |
+| PicoGK | 8015 | Voxel-based geometry (lattice + boolean + TPMS + scientific implicits) | pure Python (NumPy + scikit-image + trimesh) |
 | Unified Gateway | 8020 | All 4 engines in one container | All of above |
 
 ---
@@ -119,20 +119,41 @@ Fallback to CadQuery torus demo when VMEC file not provided. See `originals/para
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Single-stage. Now FROM forge-python-base:1.0.0 (was FROM python:3.12-slim). Python aligned to 3.11. |
-| `requirements.txt` | Pinned: fastapi==0.116.1, uvicorn[standard]==0.35.0, psutil==7.0.0 (unchanged from original) |
-| `api_wrapper.py` | **Unchanged from original.** FastAPI app on port 8015. Endpoints: GET /health, GET /metrics, POST /generate/lattice, POST /boolean, POST /run |
+| `Dockerfile` | Single-stage. FROM forge-python-base:1.0.0. Python 3.11. Copies api_wrapper.py, tpms.py, scientific_implicits.py. |
+| `requirements.txt` | Pinned: fastapi==0.116.1, uvicorn[standard]==0.35.0, psutil==7.0.0, scikit-image==0.24.0, scipy==1.13.1, trimesh==4.4.3, numpy==1.26.4 |
+| `api_wrapper.py` | FastAPI app on port 8015. Endpoints: GET /health, GET /metrics, GET /capabilities, POST /generate/lattice, POST /generate/tpms, POST /generate/implicit, POST /generate/tpms_infill, POST /boolean, POST /run |
+| `tpms.py` | Pure Python/NumPy TPMS implicit surface library. 7 TPMS types. Marching cubes STL export via scikit-image. Mirrors vpneoterra/PicoGK Extensions/TPMS/TPMS_Implicits.cs. |
+| `scientific_implicits.py` | Pure Python/NumPy scientific implicit functions. Torus, D-shaped plasma, toroidal sector. Mirrors vpneoterra/PicoGK Extensions/ScientificImplicits/ScientificImplicits.cs. |
 
 **Endpoints:**
-- `GET  /health` → `{"status":"healthy", "voxel_size": float, "runtime": "PicoGK wrapper"}`
-- `GET  /metrics` → Prometheus text format (HELP/TYPE annotated)
-- `POST /generate/lattice` → `LatticeRequest` → STL + VDB metadata
-- `POST /boolean` → `BooleanRequest` (fileA, fileB, operation) → STL + VDB
-- `POST /run` → Dispatch alias routing to /boolean or /generate/lattice
+- `GET  /health` → `{"status":"healthy", "voxel_size": float, "runtime": "PicoGK wrapper"}` (unchanged)
+- `GET  /metrics` → Prometheus text format (HELP/TYPE annotated, includes tpms/implicit/tpms_infill counters)
+- `GET  /capabilities` → Lists available TPMS types and implicit functions with formulas
+- `POST /generate/lattice` → `LatticeRequest` → STL + VDB metadata (unchanged)
+- `POST /generate/tpms` → `TpmsRequest` → STL + mesh statistics + voxel count
+- `POST /generate/implicit` → `ImplicitRequest` → STL + mesh statistics
+- `POST /generate/tpms_infill` → `TpmsInfillRequest` → infilled STL file path
+- `POST /boolean` → `BooleanRequest` (fileA, fileB, operation) → STL + VDB (unchanged)
+- `POST /run` → Dispatch alias routing to /boolean or /generate/lattice (unchanged)
 
-**Implementation note:** PicoGK is currently a shim (mock STL output) pending
-native PicoGK Python bindings. The `_mock_stl()` function generates a placeholder
-mesh. VDB output is a JSON metadata file describing the operation.
+**TPMS types (from vpneoterra/PicoGK Extensions/TPMS/TPMS_Implicits.cs):**
+- `gyroid` — sin(x)cos(y) + sin(y)cos(z) + sin(z)cos(x)
+- `schwarz_p` — cos(x) + cos(y) + cos(z)
+- `schwarz_d` — sin(x)sin(y)sin(z) + sin(x)cos(y)cos(z) + cos(x)sin(y)cos(z) + cos(x)cos(y)sin(z)
+- `neovius` — 3(cos(x)+cos(y)+cos(z)) + 4cos(x)cos(y)cos(z)
+- `fischer_koch` — cos(2x)sin(y)cos(z) + cos(x)cos(2y)sin(z) + sin(x)cos(y)cos(2z)
+- `iwp` — cos(x)cos(y) + cos(y)cos(z) + cos(z)cos(x) - cos(x)cos(y)cos(z)
+- `lidinoid` — 0.5[sin(2x)cos(y)sin(z)+sin(2y)cos(z)sin(x)+sin(2z)cos(x)sin(y)] - 0.5[cos(2x)cos(2y)+cos(2y)cos(2z)+cos(2z)cos(2x)] + 0.15
+
+**Scientific implicit types (from vpneoterra/PicoGK Extensions/ScientificImplicits/ScientificImplicits.cs):**
+- `torus` — (sqrt(x²+y²)-R)²+z²-r² (tokamak vacuum vessel shape)
+- `d_shaped_plasma` — D-shape with elongation κ and triangularity δ (toroidally symmetric)
+- `toroidal_sector` — Angular wedge of a torus (blanket modules, TF coil segments)
+
+**Implementation note:** All geometry is generated in pure Python/NumPy with
+marching cubes STL export (scikit-image). No .NET runtime or native PicoGK
+bridge library required. The `_mock_stl()` function is retained for the
+existing /generate/lattice and /boolean endpoints.
 
 ### forge-geometry-unified/
 
@@ -155,6 +176,10 @@ mesh. VDB output is a JSON metadata file describing the operation.
 | POST | /paramak/run | Paramak (alias) |
 | POST | /parastell/run | ParaStell |
 | POST | /picogk/generate/lattice | PicoGK |
+| POST | /picogk/generate/tpms | PicoGK |
+| POST | /picogk/generate/implicit | PicoGK |
+| POST | /picogk/generate/tpms_infill | PicoGK |
+| GET  | /picogk/capabilities | PicoGK |
 | POST | /picogk/boolean | PicoGK |
 | POST | /picogk/run | PicoGK (alias) |
 | GET | /health | Aggregate (all engines) |
@@ -172,7 +197,7 @@ Never modified. Preserved for full traceability.
 | `originals/cadquery/` | Dockerfile, Dockerfile.patch, api_wrapper.py, api_wrapper_patch.py, requirements.txt, requirements_patch.txt, BUILD_NOTES.md |
 | `originals/paramak/` | Dockerfile, api_wrapper.py, requirements.txt |
 | `originals/parastell/` | Dockerfile, api_wrapper.py, requirements.txt, BUILD_NOTES.md |
-| `originals/picogk/` | Dockerfile, api_wrapper.py, requirements.txt |
+| `originals/picogk/` | Dockerfile, api_wrapper.py, requirements.txt, PICOGK_REPO_REFERENCE.md |
 
 ---
 

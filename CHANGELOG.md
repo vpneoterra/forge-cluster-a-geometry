@@ -5,6 +5,88 @@ All changes are relative to the originals in `originals/`. Every file in
 
 ---
 
+## [2.3.0] — 2026-03-19 — PicoGK TPMS + Scientific Implicits Integration
+
+### Added
+
+#### picogk/tpms.py (NEW)
+- Pure Python/NumPy TPMS (Triply Periodic Minimal Surface) implicit surface library.
+  **Source:** vpneoterra/PicoGK `Extensions/TPMS/TPMS_Implicits.cs`
+  **Rationale:** The C# implementation requires .NET runtime + native PicoGK bridge
+  library unavailable in Docker. This re-implementation matches the exact formulas
+  of all 7 C# classes using NumPy broadcasting.
+- **7 TPMS types implemented:**
+  - `gyroid` — sin(x)cos(y) + sin(y)cos(z) + sin(z)cos(x)
+  - `schwarz_p` — cos(x) + cos(y) + cos(z)
+  - `schwarz_d` — sin(x)sin(y)sin(z) + sin(x)cos(y)cos(z) + cos(x)sin(y)cos(z) + cos(x)cos(y)sin(z)
+  - `neovius` — 3(cos(x)+cos(y)+cos(z)) + 4cos(x)cos(y)cos(z)
+  - `fischer_koch` — cos(2x)sin(y)cos(z) + cos(x)cos(2y)sin(z) + sin(x)cos(y)cos(2z)
+  - `iwp` — cos(x)cos(y) + cos(y)cos(z) + cos(z)cos(x) - cos(x)cos(y)cos(z)
+  - `lidinoid` — 0.5[sin(2x)cos(y)sin(z)+...] - 0.5[cos(2x)cos(2y)+...] + 0.15
+- Network and sheet solid modes (iso_level vs wall_thickness), matching TpmsImplicit base class.
+- Marching cubes STL export via scikit-image; ASCII STL fallback.
+- trimesh used for mesh I/O when available.
+
+#### picogk/scientific_implicits.py (NEW)
+- Pure Python/NumPy scientific implicit functions for fusion-energy geometry.
+  **Source:** vpneoterra/PicoGK `Extensions/ScientificImplicits/ScientificImplicits.cs`
+  **Rationale:** Same rationale as tpms.py — pure Python to avoid .NET dependency.
+- **3 implicit types implemented:**
+  - `torus` — sqrt((sqrt(x²+y²)-R)²+z²) - r (tokamak vacuum vessel)
+  - `d_shaped_plasma` — D-shaped plasma cross-section parameterised by κ, δ
+  - `toroidal_sector` — Angular wedge of a torus (blanket module / TF coil)
+
+#### originals/picogk/PICOGK_REPO_REFERENCE.md (NEW)
+- Documents the vpneoterra/PicoGK source repo and which C# classes were used
+  as the reference for the Python implementations.
+
+### Changed
+
+#### picogk/api_wrapper.py
+- **Version bumped** from 1.0.0 to 1.1.0.
+- **Added** 3 new Pydantic request models: `TpmsRequest`, `ImplicitRequest`, `TpmsInfillRequest`.
+- **Added** 4 new endpoints:
+  - `GET  /capabilities` — Lists TPMS types and implicit functions with formulas.
+  - `POST /generate/tpms` — TPMS lattice generation.
+  - `POST /generate/implicit` — Scientific implicit geometry generation.
+  - `POST /generate/tpms_infill` — Apply TPMS infill to existing STL geometry.
+- **Added** 3 new metrics counters: `tpms_count`, `implicit_count`, `tpms_infill_count`.
+- **Unchanged:** /health, /metrics, /generate/lattice, /boolean, /run endpoints
+  — all behaviours, request/response schemas, and paths are identical to the
+  original `originals/picogk/api_wrapper.py`.
+
+#### picogk/requirements.txt
+- **Added** scikit-image==0.24.0 (marching cubes STL generation from SDF).
+- **Added** scipy==1.13.1 (required by scikit-image marching cubes).
+- **Added** trimesh==4.4.3 (mesh I/O: STL, PLY, OFF, glTF export).
+- **Added** numpy==1.26.4 (explicit pin for TPMS SDF sampling).
+- **Unchanged:** fastapi==0.116.1, uvicorn[standard]==0.35.0, psutil==7.0.0.
+
+#### picogk/Dockerfile
+- **Added** `COPY tpms.py /app/tpms.py` and `COPY scientific_implicits.py /app/scientific_implicits.py`.
+- **Version bumped** SOLVER_VERSION default from 1.1.0 to 1.2.0.
+- **Unchanged:** All other Dockerfile instructions, base image, port, env vars.
+
+#### forge-geometry-unified/api_gateway.py
+- **Added** 4 new `/picogk/` routes mirroring the standalone service:
+  - `GET  /picogk/capabilities`
+  - `POST /picogk/generate/tpms`
+  - `POST /picogk/generate/implicit`
+  - `POST /picogk/generate/tpms_infill`
+- **Unchanged:** All existing routes (/picogk/generate/lattice, /picogk/boolean,
+  /picogk/run, all cadquery/paramak/parastell routes, /health, /version, /metrics).
+
+### Not Changed (intentional)
+
+- `picogk/api_wrapper.py` — /health, /metrics, /generate/lattice, /boolean, /run
+  endpoints are UNCHANGED in path, request schema, response schema, and behaviour.
+- `docker-compose.yml` — picogk service definition is UNCHANGED.
+- All files in `originals/` — exact copies of upstream source, never modified.
+- `forge-python-base/` — unchanged.
+- `cadquery/`, `paramak/`, `parastell/` — unchanged.
+
+---
+
 ## [2.2.0] — 2026-03-19 — Cluster A Consolidation
 
 ### Added

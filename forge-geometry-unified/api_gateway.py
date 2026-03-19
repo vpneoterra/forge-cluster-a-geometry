@@ -712,5 +712,287 @@ async def picogk_run(request: Request) -> dict[str, Any]:
     return await picogk_lattice(request)
 
 
+@app.get("/picogk/capabilities")
+async def picogk_capabilities() -> dict[str, Any]:
+    """
+    PicoGK capabilities: list available TPMS types and scientific implicit functions.
+    Routes to the same logic as the standalone /capabilities endpoint.
+    """
+    _metrics["request_count"] += 1
+    _metrics["picogk_calls"] += 1
+    TPMS_TYPES = [
+        "gyroid", "schwarz_p", "schwarz_d",
+        "neovius", "fischer_koch", "iwp", "lidinoid",
+    ]
+    IMPLICIT_TYPES = ["torus", "d_shaped_plasma", "toroidal_sector"]
+    return {
+        "tpms_types": TPMS_TYPES,
+        "implicit_types": IMPLICIT_TYPES,
+        "tpms_description": {
+            "gyroid": "sin(x)cos(y) + sin(y)cos(z) + sin(z)cos(x)",
+            "schwarz_p": "cos(x) + cos(y) + cos(z)",
+            "schwarz_d": "sin(x)sin(y)sin(z) + sin(x)cos(y)cos(z) + cos(x)sin(y)cos(z) + cos(x)cos(y)sin(z)",
+            "neovius": "3(cos(x)+cos(y)+cos(z)) + 4cos(x)cos(y)cos(z)",
+            "fischer_koch": "cos(2x)sin(y)cos(z) + cos(x)cos(2y)sin(z) + sin(x)cos(y)cos(2z)",
+            "iwp": "cos(x)cos(y) + cos(y)cos(z) + cos(z)cos(x) - cos(x)cos(y)cos(z)",
+            "lidinoid": "0.5[sin(2x)cos(y)sin(z)+...] - 0.5[cos(2x)cos(2y)+...] + 0.15",
+        },
+        "implicit_description": {
+            "torus": "(sqrt(x²+y²)-R)² + z² - r²  (tokamak vacuum vessel)",
+            "d_shaped_plasma": "D-shaped plasma cross-section (κ, δ parameterised)",
+            "toroidal_sector": "Angular wedge of a torus (blanket module / TF coil segment)",
+        },
+        "source": "vpneoterra/PicoGK Extensions/TPMS and Extensions/ScientificImplicits",
+        "container": "forge-geometry-unified",
+    }
+
+
+@app.post("/picogk/generate/tpms")
+async def picogk_generate_tpms(request: Request) -> dict[str, Any]:
+    """
+    Generate a TPMS (Triply Periodic Minimal Surface) lattice structure.
+    Accepts the same payload as the standalone picogk /generate/tpms endpoint.
+
+    Payload fields:
+      tpms_type: gyroid|schwarz_p|schwarz_d|neovius|fischer_koch|iwp|lidinoid
+      cell_size: float (mm)
+      wall_thickness: float (mm, 0 = network solid)
+      iso_level: float (default 0.0)
+      bounds_x, bounds_y, bounds_z: float (mm)
+      output_format: stl|vdb|numpy (default stl)
+      resolution: int (default 64)
+    """
+    _metrics["request_count"] += 1
+    _metrics["picogk_calls"] += 1
+    t0 = time.time()
+    run_id = uuid.uuid4().hex
+
+    try:
+        body = await request.json()
+        import asyncio
+        import sys
+
+        tpms_type = str(body.get("tpms_type", "gyroid")).lower()
+        cell_size = float(body.get("cell_size", 5.0))
+        wall_thickness = float(body.get("wall_thickness", 0.5))
+        iso_level = float(body.get("iso_level", 0.0))
+        bounds_x = float(body.get("bounds_x", 50.0))
+        bounds_y = float(body.get("bounds_y", 50.0))
+        bounds_z = float(body.get("bounds_z", 50.0))
+        resolution = int(body.get("resolution", 64))
+
+        output_id = uuid.uuid4().hex[:8]
+        stl_path = DATA_DIR / f"tpms_{output_id}.stl"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        # picogk/tpms.py is on PYTHONPATH inside the unified container
+        # (installed at /app/ via the picogk Dockerfile layer)
+        sys.path.insert(0, "/app")
+        from tpms import generate_tpms as _gen_tpms
+
+        def _sync():
+            return _gen_tpms(
+                tpms_type=tpms_type,
+                cell_size=cell_size,
+                wall_thickness=wall_thickness,
+                iso_level=iso_level,
+                bounds_x=bounds_x,
+                bounds_y=bounds_y,
+                bounds_z=bounds_z,
+                output_path=str(stl_path),
+                resolution=resolution,
+            )
+
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _sync),
+            timeout=FORGE_TIMEOUT,
+        )
+        duration_ms = round((time.time() - t0) * 1000, 2)
+        _metrics["total_latency_seconds"] += duration_ms / 1000
+        result.update({
+            "output_id": output_id,
+            "run_id": run_id,
+            "duration_ms": duration_ms,
+            "container": "forge-geometry-unified",
+        })
+        return result
+
+    except asyncio.TimeoutError:
+        _metrics["error_count"] += 1
+        raise HTTPException(status_code=504, detail=f"TPMS generation timed out after {FORGE_TIMEOUT}s")
+    except Exception as exc:
+        _metrics["error_count"] += 1
+        logger.exception({"event": "picogk_tpms_error", "run_id": run_id, "error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/picogk/generate/implicit")
+async def picogk_generate_implicit(request: Request) -> dict[str, Any]:
+    """
+    Generate geometry from a scientific implicit function.
+    Accepts the same payload as the standalone picogk /generate/implicit endpoint.
+
+    Payload fields:
+      implicit_type: torus|d_shaped_plasma|toroidal_sector
+      parameters: dict (type-specific, see scientific_implicits.py)
+      bounds_x, bounds_y, bounds_z: float (mm)
+      resolution: int (default 64)
+    """
+    _metrics["request_count"] += 1
+    _metrics["picogk_calls"] += 1
+    t0 = time.time()
+    run_id = uuid.uuid4().hex
+
+    try:
+        body = await request.json()
+        import asyncio
+        import sys
+
+        implicit_type = str(body.get("implicit_type", "torus")).lower()
+        parameters = dict(body.get("parameters", {}))
+        bounds_x = float(body.get("bounds_x", 300.0))
+        bounds_y = float(body.get("bounds_y", 300.0))
+        bounds_z = float(body.get("bounds_z", 300.0))
+        resolution = int(body.get("resolution", 64))
+
+        output_id = uuid.uuid4().hex[:8]
+        stl_path = DATA_DIR / f"implicit_{output_id}.stl"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        sys.path.insert(0, "/app")
+        from scientific_implicits import generate_implicit as _gen_implicit
+
+        def _sync():
+            return _gen_implicit(
+                implicit_type=implicit_type,
+                parameters=parameters,
+                bounds_x=bounds_x,
+                bounds_y=bounds_y,
+                bounds_z=bounds_z,
+                output_path=str(stl_path),
+                resolution=resolution,
+            )
+
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _sync),
+            timeout=FORGE_TIMEOUT,
+        )
+        duration_ms = round((time.time() - t0) * 1000, 2)
+        _metrics["total_latency_seconds"] += duration_ms / 1000
+        result.update({
+            "output_id": output_id,
+            "run_id": run_id,
+            "duration_ms": duration_ms,
+            "container": "forge-geometry-unified",
+        })
+        return result
+
+    except asyncio.TimeoutError:
+        _metrics["error_count"] += 1
+        raise HTTPException(status_code=504, detail=f"Implicit generation timed out after {FORGE_TIMEOUT}s")
+    except Exception as exc:
+        _metrics["error_count"] += 1
+        logger.exception({"event": "picogk_implicit_error", "run_id": run_id, "error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/picogk/generate/tpms_infill")
+async def picogk_generate_tpms_infill(request: Request) -> dict[str, Any]:
+    """
+    Apply TPMS infill to an existing STL geometry.
+    Accepts the same payload as the standalone picogk /generate/tpms_infill endpoint.
+
+    Payload fields:
+      input_file: str (STL filename in FORGE_DATA_DIR)
+      tpms_type: str (default gyroid)
+      cell_size: float (mm)
+      wall_thickness: float (mm)
+      resolution: int (default 64)
+    """
+    _metrics["request_count"] += 1
+    _metrics["picogk_calls"] += 1
+    t0 = time.time()
+    run_id = uuid.uuid4().hex
+
+    try:
+        body = await request.json()
+        import asyncio
+        import sys
+
+        input_file = _safe_name(str(body.get("input_file", "")))
+        tpms_type = str(body.get("tpms_type", "gyroid")).lower()
+        cell_size = float(body.get("cell_size", 5.0))
+        wall_thickness = float(body.get("wall_thickness", 0.5))
+        resolution = int(body.get("resolution", 64))
+
+        input_path = DATA_DIR / input_file
+        if not input_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Input file not found in shared volume: {input_file}",
+            )
+
+        # Read bounding box from STL
+        bounds_x, bounds_y, bounds_z = 50.0, 50.0, 50.0
+        try:
+            import trimesh
+            mesh = trimesh.load(str(input_path), force="mesh")
+            extents = mesh.bounding_box.extents
+            bounds_x = float(extents[0])
+            bounds_y = float(extents[1])
+            bounds_z = float(extents[2])
+        except Exception:
+            pass
+
+        output_id = uuid.uuid4().hex[:8]
+        stl_path = DATA_DIR / f"tpms_infill_{output_id}.stl"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        sys.path.insert(0, "/app")
+        from tpms import generate_tpms as _gen_tpms
+
+        def _sync():
+            return _gen_tpms(
+                tpms_type=tpms_type,
+                cell_size=cell_size,
+                wall_thickness=wall_thickness,
+                iso_level=0.0,
+                bounds_x=bounds_x,
+                bounds_y=bounds_y,
+                bounds_z=bounds_z,
+                output_path=str(stl_path),
+                resolution=resolution,
+            )
+
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _sync),
+            timeout=FORGE_TIMEOUT,
+        )
+        duration_ms = round((time.time() - t0) * 1000, 2)
+        _metrics["total_latency_seconds"] += duration_ms / 1000
+        result.update({
+            "output_id": output_id,
+            "run_id": run_id,
+            "duration_ms": duration_ms,
+            "container": "forge-geometry-unified",
+            "input_file": str(input_path),
+            "infill_bounds": [bounds_x, bounds_y, bounds_z],
+        })
+        return result
+
+    except HTTPException:
+        raise
+    except asyncio.TimeoutError:
+        _metrics["error_count"] += 1
+        raise HTTPException(status_code=504, detail=f"TPMS infill timed out after {FORGE_TIMEOUT}s")
+    except Exception as exc:
+        _metrics["error_count"] += 1
+        logger.exception({"event": "picogk_tpms_infill_error", "run_id": run_id, "error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("FORGE_PORT", "8020")))

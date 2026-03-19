@@ -3,14 +3,20 @@
 # Common deps (fastapi, uvicorn, pydantic, psutil, prometheus-client, pint)
 # are installed by forge-python-base.
 #
-# PicoGK is a lightweight voxel-based geometry shim — minimal additional deps.
-# fastapi/uvicorn/psutil are already in forge-python-base, but included here
-# for explicitness and to match the versions already working in production.
-#
-# All versions pinned (matching original exactly — already pinned upstream).
+# All versions pinned for reproducible builds.
 
 # Note: fastapi, uvicorn, psutil are already in forge-python-base at compatible
 # versions. These explicit pins confirm the tested versions.
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
 psutil==7.0.0
+
+# Added: TPMS and scientific implicits support (vpneoterra/PicoGK Extensions)
+# scikit-image: marching cubes STL generation from SDF fields
+scikit-image==0.24.0
+# scipy: required by scikit-image marching cubes
+scipy==1.13.1
+# trimesh: mesh I/O (STL, PLY, OFF, glTF export)
+trimesh==4.4.3
+# numpy: array ops for TPMS SDF sampling (already in forge-python-base as transitive dep)
+numpy==1.26.4

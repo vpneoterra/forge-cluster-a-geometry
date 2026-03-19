@@ -19,7 +19,7 @@ capabilities for the FORGE platform:
 | **CadQuery** | 8002 | General parametric CAD: box, cylinder, sphere, torus, custom scripts. Exports STEP, STL, BREP, SVG. |
 | **Paramak** | 8006 | Fusion reactor parametric CAD: tokamaks (BallReactor, SingleNullReactor, etc.). Exports STEP/STL. |
 | **ParaStell** | 8007 | Stellarator geometry from VMEC MHD equilibrium files. Exports STEP + optional DAGMC h5m. |
-| **PicoGK** | 8015 | Voxel-based geometry: lattice generation (BCC, FCC, etc.) and boolean operations. Exports STL + VDB. |
+| **PicoGK** | 8015 | Voxel-based geometry: lattice generation (BCC, FCC, etc.), boolean operations, TPMS (7 types), and scientific implicits (torus, D-shaped plasma, toroidal sector). Exports STL + VDB. |
 | **Unified Gateway** | 8020 | All 4 engines in one container. Routes via `/cadquery/*`, `/paramak/*`, `/parastell/*`, `/picogk/*`. |
 
 ---
@@ -68,6 +68,8 @@ capabilities for the FORGE platform:
 │  │    POST /cadquery/generate  POST /cadquery/export       │     │
 │  │    POST /paramak/generate   POST /parastell/run         │     │
 │  │    POST /picogk/generate/lattice  POST /picogk/boolean  │     │
+│  │    POST /picogk/generate/tpms     GET  /picogk/capabilities │  │
+│  │    POST /picogk/generate/implicit POST /picogk/generate/tpms_infill │
 │  │    GET  /health  GET /version  GET /metrics             │     │
 │  └────────────────────────────────────────────────────────┘     │
 │                                                                   │
@@ -249,7 +251,7 @@ curl -X POST http://localhost:8007/run \
 ### PicoGK (port 8015 or /picogk/* on 8020)
 
 ```bash
-# Lattice generation
+# Lattice generation (original, unchanged)
 curl -X POST http://localhost:8015/generate/lattice \
   -H "Content-Type: application/json" \
   -d '{
@@ -259,6 +261,49 @@ curl -X POST http://localhost:8015/generate/lattice \
     "boundsX": 50.0,
     "boundsY": 50.0,
     "boundsZ": 50.0
+  }'
+
+# List available TPMS types and scientific implicits
+curl http://localhost:8015/capabilities
+
+# TPMS geometry (Gyroid lattice)
+curl -X POST http://localhost:8015/generate/tpms \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tpms_type": "gyroid",
+    "cell_size": 5.0,
+    "wall_thickness": 0.5,
+    "bounds_x": 50.0,
+    "bounds_y": 50.0,
+    "bounds_z": 50.0,
+    "resolution": 64
+  }'
+
+# Fusion geometry: tokamak torus
+curl -X POST http://localhost:8015/generate/implicit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "implicit_type": "torus",
+    "parameters": {"major_radius": 100.0, "minor_radius": 30.0},
+    "bounds_x": 300.0,
+    "bounds_y": 300.0,
+    "bounds_z": 150.0
+  }'
+
+# D-shaped plasma cross-section
+curl -X POST http://localhost:8015/generate/implicit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "implicit_type": "d_shaped_plasma",
+    "parameters": {
+      "R0": 100.0,
+      "minor_radius": 30.0,
+      "elongation": 1.7,
+      "triangularity": 0.33
+    },
+    "bounds_x": 300.0,
+    "bounds_y": 300.0,
+    "bounds_z": 150.0
   }'
 ```
 

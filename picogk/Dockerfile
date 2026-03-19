@@ -1,12 +1,12 @@
 # ============================================================
-# picogk — Voxel Geometry Engine (PicoGK shim)
+# picogk — Voxel Geometry Engine (PicoGK shim + TPMS + Scientific Implicits)
 # Inherits from forge-python-base (shared base image)
 # Single-stage build (no heavy compilation required)
 # Port: 8015 | Memory limit: 1g
 #
 # Build order:
 #   1. docker build -t forge-python-base:1.0.0 ../forge-python-base
-#   2. docker build -t forge-picogk:1.1.0 .
+#   2. docker build -t forge-picogk:1.2.0 .
 #
 # Changes from original:
 #   - Aligned to Python 3.11 (original used 3.12 — now consistent with cluster)
@@ -15,11 +15,15 @@
 #   - Added SOLVER_VERSION + GIT_COMMIT build args for /version endpoint
 #   - Healthcheck uses curl -f (consistent with base pattern)
 #   - Removed redundant USER/RUN useradd (provided by base image)
+# Changes in 1.2.0 (TPMS + Scientific Implicits integration):
+#   - Added scikit-image, scipy, trimesh, numpy to requirements
+#   - Copied tpms.py and scientific_implicits.py into /app/
+#   - New endpoints: /generate/tpms, /generate/implicit, /generate/tpms_infill, /capabilities
 # ============================================================
 
 FROM forge-python-base:1.0.0
 
-ARG SOLVER_VERSION=1.1.0
+ARG SOLVER_VERSION=1.2.0
 ARG GIT_COMMIT=unknown
 
 # Switch to root only for installation, then back to forge
@@ -29,6 +33,8 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 COPY api_wrapper.py /app/api_wrapper.py
+COPY tpms.py /app/tpms.py
+COPY scientific_implicits.py /app/scientific_implicits.py
 
 RUN mkdir -p /opt/forge/data && chown -R forge:forge /app /opt/forge/data
 
